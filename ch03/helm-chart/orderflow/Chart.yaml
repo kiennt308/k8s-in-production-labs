@@ -1,0 +1,7 @@
+apiVersion: v2
+name: orderflow
+description: OrderFlow Commerce Platform Helm v4 chart
+type: application
+version: 1.0.0
+appVersion: "6.7.1"
+kubeVersion: ">=1.35.0-0"

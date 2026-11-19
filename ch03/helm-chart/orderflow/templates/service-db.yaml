@@ -1,0 +1,21 @@
+{{- if .Values.database.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: orderflow-db
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: orderflow-db
+    app.kubernetes.io/component: database
+    {{ include "orderflow.commonLabels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: false
+  selector:
+    app.kubernetes.io/name: orderflow-db
+    app.kubernetes.io/part-of: orderflow
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+{{- end }}

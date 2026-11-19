@@ -1,0 +1,18 @@
+# Copyright 2026 Kien Nguyen - Apache-2.0 License
+# Chapter 11 Lab: Isolated Namespace DR Restore Drill
+# Restores orderflow-prod backup into orderflow-dr-drill safely.
+apiVersion: velero.io/v1
+kind: Restore
+metadata:
+  name: orderflow-dr-drill-01
+  namespace: velero
+  labels:
+    app.kubernetes.io/part-of: orderflow-dr
+spec:
+  backupName: orderflow-prod-pre-v137
+  includedNamespaces:
+    - orderflow-prod
+  namespaceMapping:
+    orderflow-prod: orderflow-dr-drill
+  restorePVs: true
+  existingResourcePolicy: none

@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: orderflow-prod
+resources:
+  - ../../base
+configMapGenerator:
+  - name: order-service-config
+    behavior: merge
+    literals:
+      - PODINFO_LEVEL=info
+      - PODINFO_UI_MESSAGE=OrderFlow Production API
+generatorOptions:
+  immutable: true
+replicas:
+  - name: order-service
+    count: 3
+patches:
+  - path: patch-resources.yaml

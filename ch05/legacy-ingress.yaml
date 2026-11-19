@@ -1,0 +1,34 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: orderflow-legacy-ingress
+  namespace: orderflow-prod
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "15"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "15"
+    nginx.ingress.kubernetes.io/rewrite-target: /orders/$2
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - orderflow.example.com
+      secretName: orderflow-tls
+  rules:
+    - host: orderflow.example.com
+      http:
+        paths:
+          - path: /api/v1/orders(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: order-service
+                port:
+                  number: 9898
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: order-gateway
+                port:
+                  number: 8080

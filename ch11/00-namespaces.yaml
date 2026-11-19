@@ -1,0 +1,31 @@
+# Copyright 2026 Kien Nguyen - Apache-2.0 License
+# Chapter 11 Lab: Baseline Namespaces for Backup & DR Drills
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: orderflow-prod
+  labels:
+    app.kubernetes.io/part-of: orderflow
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: velero
+  labels:
+    app.kubernetes.io/part-of: platform-dr
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: orderflow-dr-drill
+  labels:
+    app.kubernetes.io/part-of: orderflow-dr
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

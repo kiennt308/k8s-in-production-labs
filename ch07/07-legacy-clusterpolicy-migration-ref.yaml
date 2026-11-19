@@ -1,0 +1,30 @@
+# LEGACY REFERENCE ONLY — DO NOT APPLY TO KYVERNO v1.20+ CLUSTERS.
+# Kyverno v1.20 retired legacy ClusterPolicy verifyImages execution
+# in favor of policies.kyverno.io/v1 ImageValidatingPolicy.
+# Use `kyverno migrate` when upgrading clusters from v1.13–v1.19.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: legacy-verify-images-reference
+spec:
+  validationFailureAction: Enforce
+  rules:
+    - name: verify-cosign-signature
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["orderflow-prod"]
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/orderflow-internal/*"
+          mutateDigest: true
+          verifyDigest: true
+          attestors:
+            - count: 1
+              entries:
+                - keys:
+                    publicKeys: |
+                      -----BEGIN PUBLIC KEY-----
+                      MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEW8q2w1xM7m...
+                      -----END PUBLIC KEY-----

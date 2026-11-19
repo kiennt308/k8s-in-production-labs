@@ -1,0 +1,10 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: cilium
+  labels:
+    app.kubernetes.io/part-of: orderflow
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  controllerName: io.cilium/gateway-controller
+  description: Cilium eBPF and Envoy Gateway API controller

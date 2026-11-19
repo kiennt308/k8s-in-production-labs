@@ -1,0 +1,46 @@
+# Proves container cgroup OOM containment (tmpfs counts against RAM).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: staging-oom-containment
+  namespace: orderflow-staging
+  labels:
+    app.kubernetes.io/name: staging-oom-containment
+    app.kubernetes.io/part-of: orderflow
+spec:
+  automountServiceAccountToken: false
+  priorityClassName: orderflow-batch
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: mem-spike
+      image: nginxinc/nginx-unprivileged:1.27-alpine
+      command:
+        - sh
+        - -c
+        - dd if=/dev/zero of=/tmp/fill bs=1M count=180 && sleep 30
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 250m
+          memory: 64Mi
+      volumeMounts:
+        - name: tmpfs-scratch
+          mountPath: /tmp
+  volumes:
+    - name: tmpfs-scratch
+      emptyDir:
+        medium: Memory

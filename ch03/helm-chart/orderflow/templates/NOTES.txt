@@ -1,0 +1,9 @@
+Release {{ .Release.Name }} deployed in {{ .Release.Namespace }}.
+
+Verify workloads and persistent volumes:
+  kubectl -n {{ .Release.Namespace }} get deploy,sts,pvc,svc
+
+Check API readiness via port-forward:
+  kubectl -n {{ .Release.Namespace }} port-forward \
+    svc/order-service 9898:9898
+  curl -s http://127.0.0.1:9898/readyz

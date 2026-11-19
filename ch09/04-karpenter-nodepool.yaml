@@ -1,0 +1,73 @@
+# Karpenter v1.15.x NodePool & AWS EC2NodeClass Reference
+# Note: Validate schema with kubeconform / --dry-run=client locally.
+# Live node provisioning requires an AWS EKS cluster with Karpenter.
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: orderflow-general
+  labels:
+    app.kubernetes.io/part-of: orderflow
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  template:
+    metadata:
+      labels:
+        workload-tier: orderflow-app
+    spec:
+      expireAfter: 720h
+      terminationGracePeriod: 24h
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: orderflow-al2023
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64", "arm64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot", "on-demand"]
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["c", "m", "r"]
+        - key: karpenter.k8s.aws/instance-generation
+          operator: Gt
+          values: ["5"]
+  limits:
+    cpu: "64"
+    memory: 256Gi
+  disruption:
+    consolidationPolicy: Balanced
+    consolidateAfter: 30s
+    budgets:
+      - nodes: "10%"
+      - nodes: "0"
+        schedule: "0 13 * * 5"
+        duration: 4h
+        reasons:
+          - Underutilized
+          - Drifted
+---
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: orderflow-al2023
+spec:
+  role: "KarpenterNodeRole-orderflow-prod"
+  amiSelectorTerms:
+    - alias: al2023@latest
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "orderflow-prod"
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "orderflow-prod"
+  blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs:
+        volumeSize: 40Gi
+        volumeType: gp3
+        encrypted: true

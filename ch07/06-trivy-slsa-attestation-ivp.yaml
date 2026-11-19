@@ -1,0 +1,53 @@
+# Kyverno v1.20 ImageValidatingPolicy checking SLSA provenance
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: orderflow-verify-slsa-provenance
+  labels:
+    app.kubernetes.io/part-of: orderflow
+spec:
+  validationActions:
+    - Audit
+    - Warn
+  failurePolicy: Ignore
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: orderflow-prod
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  matchImageReferences:
+    - glob: "ghcr.io/orderflow-internal/*"
+  attestors:
+    - name: ciBuilder
+      cosign:
+        keyless:
+          identities:
+            - issuer: "https://token.actions.githubusercontent.com"
+              subjectRegExp: >-
+                ^https://github\.com/kiennt308/.*$
+          rekor:
+            url: "https://rekor.sigstore.dev"
+  attestations:
+    - name: slsaProvenance
+      referrer:
+        type: "https://slsa.dev/provenance/v1"
+  validations:
+    - message: >-
+        Missing signed SLSA v1.0 provenance attestation.
+      expression: >-
+        images.containers.map(img,
+          verifyAttestationSignatures(img,
+            attestations.slsaProvenance, [attestors.ciBuilder])
+        ).all(cnt, cnt > 0)
+    - message: >-
+        SLSA provenance must come from GitHub Actions workflow builder.
+      expression: >-
+        images.containers.map(img,
+          extractPayload(img, attestations.slsaProvenance)
+            .predicate.buildDefinition.buildType ==
+            "https://actions.github.io/buildtypes/workflow/v1"
+        ).all(ok, ok == true)

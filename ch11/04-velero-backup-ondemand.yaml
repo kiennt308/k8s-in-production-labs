@@ -1,0 +1,39 @@
+# Copyright 2026 Kien Nguyen - Apache-2.0 License
+# Chapter 11 Lab: Pre-Upgrade On-Demand Backup for orderflow-prod
+apiVersion: velero.io/v1
+kind: Backup
+metadata:
+  name: orderflow-prod-pre-v137
+  namespace: velero
+  labels:
+    app.kubernetes.io/part-of: orderflow
+    backup-reason: pre-upgrade-v137
+spec:
+  includedNamespaces:
+    - orderflow-prod
+  storageLocation: orderflow-dr-s3
+  snapshotVolumes: true
+  snapshotMoveData: true
+  datamover: velero-block
+  uploaderConfig:
+    parallelBlocksUpload: 8
+  ttl: 720h0m0s
+  hooks:
+    resources:
+      - name: orderflow-db-checkpoint
+        includedNamespaces:
+          - orderflow-prod
+        includedResources:
+          - pods
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: orderflow-db
+        pre:
+          - exec:
+              container: postgres
+              command:
+                - /bin/sh
+                - -c
+                - psql -U orderflow -d orders -c "CHECKPOINT;"
+              onError: Fail
+              timeout: 60s

@@ -1,0 +1,25 @@
+# Copyright 2026 Kien Nguyen - Apache-2.0 License
+# Chapter 12 Lab - Fault 1: Egress NetworkPolicy Missing DNS Rule
+# Drops UDP/TCP 53 queries from order-gateway to CoreDNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: order-gateway-egress
+  namespace: orderflow-staging
+  labels:
+    app.kubernetes.io/name: order-gateway
+    app.kubernetes.io/part-of: orderflow
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: order-gateway
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: order-service
+      ports:
+        - protocol: TCP
+          port: 9898

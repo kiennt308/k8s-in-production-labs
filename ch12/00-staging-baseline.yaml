@@ -1,0 +1,335 @@
+# Copyright 2026 Kien Nguyen - Apache-2.0 License
+# Chapter 12 Lab: Healthy OrderFlow Staging Baseline
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: orderflow-staging
+  labels:
+    app.kubernetes.io/part-of: orderflow
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: orderflow-staging-quota
+  namespace: orderflow-staging
+spec:
+  hard:
+    pods: "12"
+    requests.cpu: "2"
+    requests.memory: 2Gi
+    limits.cpu: "4"
+    limits.memory: 4Gi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: order-gateway-sa
+  namespace: orderflow-staging
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: order-service-sa
+  namespace: orderflow-staging
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: payment-worker-sa
+  namespace: orderflow-staging
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: order-gateway-nginx
+  namespace: orderflow-staging
+  labels:
+    app.kubernetes.io/name: order-gateway
+    app.kubernetes.io/part-of: orderflow
+data:
+  default.conf: |
+    server {
+      listen 8080;
+      resolver kube-dns.kube-system.svc.cluster.local
+        ipv6=off valid=5s;
+      location = /healthz {
+        access_log off;
+        return 200 "ok\n";
+      }
+      location /api/ {
+        set $api "http://order-service.orderflow-staging";
+        set $svc "${api}.svc.cluster.local:9898";
+        rewrite ^/api/(.*)$ /$1 break;
+        proxy_pass $svc;
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-gateway
+  namespace: orderflow-staging
+  labels:
+    app.kubernetes.io/name: order-gateway
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/part-of: orderflow
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: order-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: order-gateway
+        app.kubernetes.io/component: edge
+        app.kubernetes.io/part-of: orderflow
+    spec:
+      serviceAccountName: order-gateway-sa
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nginx
+          image: nginxinc/nginx-unprivileged:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /var/cache/nginx
+            - name: run
+              mountPath: /var/run
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: order-gateway-nginx
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-gateway
+  namespace: orderflow-staging
+  labels:
+    app.kubernetes.io/name: order-gateway
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/part-of: orderflow
+spec:
+  selector:
+    app.kubernetes.io/name: order-gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+  namespace: orderflow-staging
+  labels:
+    app.kubernetes.io/name: order-service
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: orderflow
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: order-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: order-service
+        app.kubernetes.io/component: api
+        app.kubernetes.io/part-of: orderflow
+    spec:
+      serviceAccountName: order-service-sa
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: podinfo
+          image: ghcr.io/stefanprodan/podinfo:6.7.1
+          ports:
+            - name: http
+              containerPort: 9898
+            - name: grpc
+              containerPort: 9999
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+  namespace: orderflow-staging
+  labels:
+    app.kubernetes.io/name: order-service
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: orderflow
+spec:
+  selector:
+    app.kubernetes.io/name: order-service
+  ports:
+    - name: http
+      port: 9898
+      targetPort: http
+    - name: grpc
+      port: 9999
+      targetPort: grpc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-worker
+  namespace: orderflow-staging
+  labels:
+    app.kubernetes.io/name: payment-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: orderflow
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: payment-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: payment-worker
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/part-of: orderflow
+    spec:
+      serviceAccountName: payment-worker-sa
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: podinfo
+          image: ghcr.io/stefanprodan/podinfo:6.7.1
+          command:
+            - ./podinfo
+          args:
+            - --port=9898
+            - --level=info
+          ports:
+            - name: http
+              containerPort: 9898
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: data
+          emptyDir: {}

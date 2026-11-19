@@ -1,0 +1,35 @@
+global:
+  storageClassName: orderflow-fast-retain
+
+orderService:
+  replicaCount: 3
+  config:
+    level: info
+    uiMessage: "OrderFlow Production API"
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+database:
+  storageSize: 50Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+cache:
+  storageSize: 10Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi

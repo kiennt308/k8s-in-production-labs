@@ -1,0 +1,52 @@
+global:
+  storageClassName: orderflow-fast-retain
+
+orderService:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/stefanprodan/podinfo
+    tag: "6.7.1"
+    pullPolicy: IfNotPresent
+  config:
+    level: debug
+    uiMessage: "OrderFlow Staging API"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+database:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  storageSize: 10Gi
+  dbName: orders
+  dbUser: orderflow
+  existingSecret: orderflow-db-secret
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+cache:
+  enabled: true
+  image:
+    repository: redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
+  storageSize: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

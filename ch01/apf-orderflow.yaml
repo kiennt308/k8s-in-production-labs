@@ -1,0 +1,51 @@
+apiVersion: flowcontrol.apiserver.k8s.io/v1
+kind: PriorityLevelConfiguration
+metadata:
+  name: orderflow-api
+  labels:
+    app.kubernetes.io/part-of: orderflow
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  type: Limited
+  limited:
+    nominalConcurrencyShares: 40
+    lendablePercent: 25
+    borrowingLimitPercent: 50
+    limitResponse:
+      type: Queue
+      queuing:
+        queues: 16
+        handSize: 6
+        queueLengthLimit: 50
+---
+apiVersion: flowcontrol.apiserver.k8s.io/v1
+kind: FlowSchema
+metadata:
+  name: orderflow-prod-traffic
+  labels:
+    app.kubernetes.io/part-of: orderflow
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  matchingPrecedence: 2500
+  priorityLevelConfiguration:
+    name: orderflow-api
+  distinguisherMethod:
+    type: ByNamespace
+  rules:
+    - subjects:
+        - kind: Group
+          group:
+            name: system:authenticated
+      resourceRules:
+        - apiGroups: [""]
+          resources: ["pods", "services", "endpoints"]
+          verbs: ["get", "list", "watch"]
+          namespaces: ["orderflow-prod"]
+        - apiGroups: ["apps"]
+          resources: ["deployments", "replicasets"]
+          verbs: ["get", "list", "watch"]
+          namespaces: ["orderflow-prod"]
+        - apiGroups: ["discovery.k8s.io"]
+          resources: ["endpointslices"]
+          verbs: ["get", "list", "watch"]
+          namespaces: ["orderflow-prod"]

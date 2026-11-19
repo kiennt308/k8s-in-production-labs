@@ -1,0 +1,42 @@
+# Copyright 2026 Kien Nguyen - Apache-2.0 License
+# Chapter 11 Lab: Velero v1.19 Automated Backup Schedule
+# Uses CSI snapshot block data mover and PostgreSQL checkpoint hooks.
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: orderflow-prod-hourly
+  namespace: velero
+  labels:
+    app.kubernetes.io/part-of: orderflow
+spec:
+  schedule: "0 * * * *"
+  useOwnerReferencesInBackup: false
+  template:
+    includedNamespaces:
+      - orderflow-prod
+    storageLocation: orderflow-dr-s3
+    snapshotVolumes: true
+    snapshotMoveData: true
+    datamover: velero-block
+    uploaderConfig:
+      parallelBlocksUpload: 8
+    ttl: 168h0m0s
+    hooks:
+      resources:
+        - name: orderflow-db-checkpoint
+          includedNamespaces:
+            - orderflow-prod
+          includedResources:
+            - pods
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: orderflow-db
+          pre:
+            - exec:
+                container: postgres
+                command:
+                  - /bin/sh
+                  - -c
+                  - psql -U orderflow -d orders -c "CHECKPOINT;"
+                onError: Fail
+                timeout: 60s

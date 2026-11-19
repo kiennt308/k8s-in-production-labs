@@ -1,0 +1,44 @@
+# Kyverno v1.20 ImageValidatingPolicy (policies.kyverno.io/v1)
+# Replace the placeholder public key with your own cosign.pub key
+# (or KMS-exported public key) before enforcing on production clusters.
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: orderflow-verify-cosign-key
+  labels:
+    app.kubernetes.io/part-of: orderflow
+spec:
+  validationActions:
+    - Deny
+  failurePolicy: Fail
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: orderflow-prod
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  matchImageReferences:
+    - glob: "ghcr.io/orderflow-internal/*"
+  validationConfigurations:
+    mutateDigest: true
+    verifyDigest: true
+    required: true
+  attestors:
+    - name: cosignKmsKey
+      cosign:
+        key:
+          data: |
+            -----BEGIN PUBLIC KEY-----
+            MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEW8q2w1xM7m9J2s4h8vQvR2
+            yL3k9pN4tB6uV1xZ8cA0fE3mQ7nT2wR5vK8yH1pL4qS6uD9xN0mJ3cP7wQ==
+            -----END PUBLIC KEY-----
+  validations:
+    - message: >-
+        Image signature failed Cosign KMS public key verification.
+      expression: >-
+        images.containers.map(img,
+          verifyImageSignatures(img, [attestors.cosignKmsKey])
+        ).all(cnt, cnt > 0)

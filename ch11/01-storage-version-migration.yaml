@@ -1,0 +1,20 @@
+# Copyright 2026 Kien Nguyen - Apache-2.0 License
+# Chapter 11 Lab: Kubernetes v1.37 GA StorageVersionMigration
+# Re-encodes etcd objects after KMS key rotation or CRD upgrades.
+apiVersion: storagemigration.k8s.io/v1
+kind: StorageVersionMigration
+metadata:
+  name: migrate-core-secrets-v137
+spec:
+  resource:
+    group: ""
+    resource: secrets
+---
+apiVersion: storagemigration.k8s.io/v1
+kind: StorageVersionMigration
+metadata:
+  name: migrate-httproutes-v137
+spec:
+  resource:
+    group: gateway.networking.k8s.io
+    resource: httproutes

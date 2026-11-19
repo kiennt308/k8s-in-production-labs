@@ -1,0 +1,61 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: orderflow-image-and-label-guard
+  labels:
+    app.kubernetes.io/part-of: orderflow
+spec:
+  failurePolicy: Fail
+  paramKind:
+    apiVersion: v1
+    kind: ConfigMap
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  matchConditions:
+    - name: skip-exempt-pods
+      expression: >-
+        !has(object.metadata.labels) ||
+        !('policy.orderflow.io/exempt' in object.metadata.labels) ||
+        object.metadata.labels['policy.orderflow.io/exempt'] != 'true'
+  variables:
+    - name: allowedList
+      expression: "params.data['allowedPrefixes'].split(',')"
+    - name: allContainers
+      expression: >-
+        object.spec.containers +
+        (has(object.spec.initContainers) ?
+        object.spec.initContainers : [])
+  validations:
+    - expression: >-
+        has(object.metadata.labels) &&
+        'app.kubernetes.io/part-of' in object.metadata.labels &&
+        size(object.metadata.labels['app.kubernetes.io/part-of']) > 0
+      message: "Pods must define label app.kubernetes.io/part-of."
+      reason: Invalid
+    - expression: >-
+        variables.allContainers.all(c,
+          c.image.contains('@sha256:') ||
+          (c.image.contains(':') && !c.image.endsWith(':latest'))
+        )
+      message: "Images must pin a non-latest tag or @sha256 digest."
+      reason: Forbidden
+    - expression: >-
+        variables.allContainers.all(c,
+          variables.allowedList.exists(p, c.image.startsWith(p))
+        )
+      messageExpression: >-
+        'Image must match an allowed prefix: ' +
+        params.data['allowedPrefixes']
+      reason: Forbidden
+    - expression: >-
+        variables.allContainers.all(c,
+          has(c.securityContext) &&
+          has(c.securityContext.readOnlyRootFilesystem) &&
+          c.securityContext.readOnlyRootFilesystem == true
+        )
+      message: "Containers must set readOnlyRootFilesystem: true."
+      reason: Forbidden

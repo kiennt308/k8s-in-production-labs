@@ -1,0 +1,59 @@
+# Requires nodes configured with containerd runsc (gVisor) handler.
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: gvisor
+handler: runsc
+overhead:
+  podFixed:
+    cpu: 20m
+    memory: 40Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: invoice-pdf-sandbox
+  namespace: orderflow-prod
+  labels:
+    app.kubernetes.io/name: invoice-pdf-sandbox
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: orderflow
+spec:
+  runtimeClassName: gvisor
+  serviceAccountName: payment-worker-sa
+  automountServiceAccountToken: false
+  priorityClassName: orderflow-standard
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    runAsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: renderer
+      image: ghcr.io/stefanprodan/podinfo:6.7.1
+      command: ["./podinfo", "--port=9898"]
+      ports:
+        - name: http
+          containerPort: 9898
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+  volumes:
+    - name: tmp
+      emptyDir:
+        medium: Memory
+        sizeLimit: 32Mi

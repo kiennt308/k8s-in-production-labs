@@ -1,0 +1,104 @@
+{{- if .Values.database.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: orderflow-db
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: orderflow-db
+    app.kubernetes.io/component: database
+    {{ include "orderflow.commonLabels" . | nindent 4 }}
+spec:
+  serviceName: orderflow-db
+  replicas: 1
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: orderflow-db
+      app.kubernetes.io/part-of: orderflow
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: orderflow-db
+        app.kubernetes.io/component: database
+        {{ include "orderflow.commonLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: orderflow-db-sa
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          {{- $img := .Values.database.image }}
+          image: {{ printf "%s:%s" $img.repository $img.tag }}
+          imagePullPolicy: {{ $img.pullPolicy }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.database.dbName | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.database.dbUser | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: tmp
+              mountPath: /tmp
+            - name: pg-run
+              mountPath: /var/run/postgresql
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.database.dbUser | quote }}
+                - -d
+                - {{ .Values.database.dbName | quote }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.database.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: pg-run
+          emptyDir:
+            sizeLimit: 16Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: orderflow-db
+          app.kubernetes.io/part-of: orderflow
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: {{ .Values.global.storageClassName }}
+        resources:
+          requests:
+            storage: {{ .Values.database.storageSize }}
+{{- end }}

@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: staging-noisy-neighbor
+  namespace: orderflow-staging
+  labels:
+    app.kubernetes.io/name: staging-noisy-neighbor
+    app.kubernetes.io/part-of: orderflow
+spec:
+  automountServiceAccountToken: false
+  priorityClassName: orderflow-batch
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: burst-test
+      image: nginxinc/nginx-unprivileged:1.27-alpine
+      command: ["sh", "-c", "sleep 60"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      resources:
+        requests:
+          cpu: 1000m
+          memory: 1Gi
+        limits:
+          cpu: 1000m
+          memory: 1Gi

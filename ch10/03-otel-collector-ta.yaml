@@ -1,0 +1,123 @@
+# Requires OpenTelemetry Operator v0.163.0 CRDs (opentelemetry.io/v1beta1)
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel
+  namespace: platform-observability
+  labels:
+    app.kubernetes.io/part-of: orderflow
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  mode: statefulset
+  replicas: 2
+  image: otel/opentelemetry-collector-contrib:0.141.0
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+  targetAllocator:
+    enabled: true
+    allocationStrategy: consistent-hashing
+    prometheusCR:
+      enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      prometheus:
+        config:
+          scrape_configs:
+          - job_name: orderflow-otel-targets
+            scrape_interval: 15s
+            scrape_native_histograms: true
+            scrape_protocols:
+            - PrometheusProto
+            - OpenMetricsText1.0.0
+            - PrometheusText0.0.4
+            kubernetes_sd_configs:
+            - role: pod
+              namespaces:
+                names:
+                - orderflow-prod
+            relabel_configs:
+            - source_labels:
+              - __meta_kubernetes_pod_annotation_prometheus_io_scrape
+              action: keep
+              regex: "true"
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 400
+        spike_limit_mib: 100
+      k8sattributes:
+        extract:
+          metadata:
+            - k8s.namespace.name
+            - k8s.pod.name
+            - k8s.deployment.name
+            - k8s.node.name
+      transform/cardinality:
+        error_mode: ignore
+        metric_statements:
+          - context: datapoint
+            statements:
+              - delete_key(attributes, "user.id")
+              - delete_key(attributes, "request.id")
+              - delete_key(attributes, "order_id")
+              - >-
+                replace_pattern(attributes["http.route"],
+                "/orders/[0-9a-fA-F-]+", "/orders/:id")
+      filter/noise:
+        error_mode: ignore
+        metrics:
+          datapoint:
+            - attributes["http.route"] == "/healthz"
+            - attributes["http.route"] == "/readyz"
+      batch:
+        timeout: 5s
+        send_batch_size: 1024
+    exporters:
+      otlphttp/prometheus:
+        endpoint: http://prom.platform-observability.svc:9090/api/v1/otlp
+        tls:
+          insecure: true
+      debug:
+        verbosity: basic
+    service:
+      pipelines:
+        metrics:
+          receivers: [otlp, prometheus]
+          processors:
+            - memory_limiter
+            - k8sattributes
+            - transform/cardinality
+            - filter/noise
+            - batch
+          exporters: [otlphttp/prometheus]
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes, batch]
+          exporters: [debug]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes, batch]
+          exporters: [debug]

@@ -1,0 +1,136 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: payment-worker-sa
+  namespace: orderflow-prod
+  labels:
+    app.kubernetes.io/name: payment-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: orderflow
+    app.kubernetes.io/managed-by: kubectl
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-worker
+  namespace: orderflow-prod
+  labels:
+    app.kubernetes.io/name: payment-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: orderflow
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: payment-worker
+      app.kubernetes.io/part-of: orderflow
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: payment-worker
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/part-of: orderflow
+        app.kubernetes.io/managed-by: kubectl
+    spec:
+      serviceAccountName: payment-worker-sa
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: payment-worker
+          image: ghcr.io/stefanprodan/podinfo:6.7.1
+          imagePullPolicy: IfNotPresent
+          command: ["./podinfo", "--port=9898", "--level=info"]
+          env:
+            - name: REDIS_ADDR
+              value: >-
+                orderflow-cache.orderflow-prod.svc.cluster.local:6379
+          ports:
+            - name: http
+              containerPort: 9898
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          resizePolicy:
+            - resourceName: cpu
+              restartPolicy: NotRequired
+            - resourceName: memory
+              restartPolicy: RestartContainer
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: data
+          emptyDir: {}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: payment-worker-redis
+  namespace: orderflow-prod
+  labels:
+    app.kubernetes.io/name: payment-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: orderflow
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: payment-worker
+  pollingInterval: 10
+  cooldownPeriod: 60
+  minReplicaCount: 0
+  maxReplicaCount: 15
+  fallback:
+    failureThreshold: 3
+    replicas: 2
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 60
+          policies:
+            - type: Percent
+              value: 50
+              periodSeconds: 30
+  triggers:
+    - type: redis
+      metadata:
+        addressFromEnv: REDIS_ADDR
+        listName: payment-jobs
+        listLength: "5"
+        activationListLength: "1"
+        databaseIndex: "0"

@@ -1,0 +1,31 @@
+# Copyright 2026 Kien Nguyen - Apache-2.0 License
+# Chapter 11 Lab: Velero v1.18/v1.19 BSL & CSI VolumeSnapshotClass
+# Replace bucket, region, and s3Url for your S3 or MinIO target.
+apiVersion: velero.io/v1
+kind: BackupStorageLocation
+metadata:
+  name: orderflow-dr-s3
+  namespace: velero
+spec:
+  provider: aws
+  default: true
+  accessMode: ReadWrite
+  objectStorage:
+    bucket: orderflow-velero-backups
+    prefix: prod-cluster-01
+  config:
+    region: us-east-1
+    s3ForcePathStyle: "true"
+    s3Url: http://minio.velero.svc.cluster.local:9000
+  credential:
+    name: cloud-credentials
+    key: cloud
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: orderflow-csi-snapclass
+  labels:
+    velero.io/csi-volumesnapshot-class: "true"
+driver: ebs.csi.aws.com
+deletionPolicy: Retain

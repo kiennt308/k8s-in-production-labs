@@ -1,0 +1,15 @@
+# Control-plane kube-apiserver config file (--encryption-provider-config)
+# Do NOT apply this file with kubectl; place it on control-plane nodes.
+apiVersion: apiserver.config.k8s.io/v1
+kind: EncryptionConfiguration
+resources:
+  - resources:
+      - secrets
+      - configmaps
+    providers:
+      - kms:
+          apiVersion: v2
+          name: orderflow-kms-v2
+          endpoint: unix:///var/run/kmsplugin/socket.sock
+          timeout: 3s
+      - identity: {}

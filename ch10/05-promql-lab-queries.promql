@@ -1,0 +1,46 @@
+# PromQL Query Pack for OrderFlow (Prometheus v3.16.0)
+
+# 1. Classic Histogram p99 Latency on order-service (/metrics scrape)
+histogram_quantile(
+  0.99,
+  sum by (le, path, status) (
+    rate(http_request_duration_seconds_bucket{app="order-service"}[5m])
+  )
+)
+
+# 2. Native Histogram p99 Latency using UTF-8 OTel Metric Name
+# Note: Native histograms omit _bucket and le labels!
+histogram_quantile(
+  0.99,
+  sum by ("http.route") (
+    rate(
+      {"http.server.request.duration", "service.name"="order-service"}[5m]
+    )
+  )
+)
+
+# 3. HTTP 5xx Error Ratio Across OrderFlow API Routes
+sum by (path) (
+  rate(http_request_duration_seconds_count{
+    app="order-service",
+    status=~"5.."
+  }[5m])
+)
+/
+sum by (path) (
+  rate(http_request_duration_seconds_count{app="order-service"}[5m])
+)
+
+# 4. Kubernetes v1.37 API Server Native Histogram Request Latency (p99)
+histogram_quantile(
+  0.99,
+  sum by (verb, resource) (
+    rate(apiserver_request_duration_seconds[5m])
+  )
+)
+
+# 5. Top 10 Highest-Cardinality Metrics in Prometheus TSDB
+topk(
+  10,
+  count by (__name__) ({__name__=~".+"})
+)

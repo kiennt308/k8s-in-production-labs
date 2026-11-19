@@ -1,0 +1,25 @@
+# Test Pod referencing an unsigned image to verify ImageValidatingPolicy
+apiVersion: v1
+kind: Pod
+metadata:
+  name: unsigned-order-worker
+  namespace: orderflow-prod
+  labels:
+    app.kubernetes.io/name: unsigned-order-worker
+    app.kubernetes.io/part-of: orderflow
+spec:
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: worker
+      image: ghcr.io/orderflow-internal/payment-worker:1.4.2
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL

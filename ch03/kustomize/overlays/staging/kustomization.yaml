@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: orderflow-staging
+resources:
+  - ../../base
+configMapGenerator:
+  - name: order-service-config
+    behavior: merge
+    literals:
+      - PODINFO_LEVEL=debug
+      - PODINFO_UI_MESSAGE=OrderFlow Staging API
+      - DB_HOST=orderflow-db.orderflow-staging.svc.cluster.local
+      - CACHE_HOST=orderflow-cache.orderflow-staging.svc.cluster.local
+generatorOptions:
+  immutable: true
+replicas:
+  - name: order-service
+    count: 1
+patches:
+  - path: patch-resources.yaml

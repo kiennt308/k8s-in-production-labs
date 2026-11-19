@@ -1,0 +1,32 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: orderflow-critical
+  labels:
+    app.kubernetes.io/part-of: orderflow
+value: 1000000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: "Critical revenue-path API and database pods for OrderFlow."
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: orderflow-standard
+  labels:
+    app.kubernetes.io/part-of: orderflow
+value: 100000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: "Standard asynchronous worker workloads for OrderFlow."
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: orderflow-batch
+  labels:
+    app.kubernetes.io/part-of: orderflow
+value: 10000
+globalDefault: false
+preemptionPolicy: Never
+description: "Non-preempting staging load and batch jobs."

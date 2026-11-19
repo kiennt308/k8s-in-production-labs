@@ -1,0 +1,48 @@
+# Helm v4.3 values for OpenCost v1.121.4 (chart opencost-2.5.34)
+# Deploy into platform-observability:
+# helm upgrade --install opencost opencost/opencost \
+#   --namespace platform-observability --version 2.5.34 \
+#   -f 05-opencost-values.yaml
+opencost:
+  exporter:
+    defaultClusterId: "orderflow-prod"
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+  prometheus:
+    internal:
+      enabled: true
+      serviceName: prom
+      namespaceName: platform-observability
+      port: 9090
+  ui:
+    enabled: true
+    httpRoute:
+      enabled: true
+      hostnames:
+        - cost.orderflow.internal
+      parentRefs:
+        - name: orderflow-public-gw
+          namespace: platform-gateway
+          sectionName: https
+  customPricing:
+    enabled: true
+    provider: custom
+    costModel:
+      CPU: "0.031611"
+      RAM: "0.004237"
+      storage: "0.000110"
+# Optional Prometheus-free mode (for clusters without Prometheus):
+# collectorDataSource:
+#   enabled: true
+#   scrapeInterval: 30s

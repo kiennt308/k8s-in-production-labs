@@ -1,0 +1,82 @@
+# Copyright 2026 Kien Nguyen - Apache-2.0 License
+# Chapter 11 Lab: PSA-Restricted PostgreSQL Restore Verification Job
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: orderflow-dr-verify-sa
+  namespace: orderflow-dr-drill
+automountServiceAccountToken: false
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: verify-orderflow-db-restore
+  namespace: orderflow-dr-drill
+  labels:
+    app.kubernetes.io/name: verify-orderflow-db-restore
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: orderflow
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 180
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: verify-orderflow-db-restore
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: orderflow
+    spec:
+      serviceAccountName: orderflow-dr-verify-sa
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: pg-verify
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: PGHOST
+              value: orderflow-db.orderflow-dr-drill.svc.cluster.local
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              value: orderflow
+            - name: PGDATABASE
+              value: orders
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: orderflow-db-secret
+                  key: POSTGRES_PASSWORD
+          command:
+            - /bin/sh
+            - -c
+            - |
+              pg_isready -t 10 &&
+              psql -Atc "SELECT count(*) FROM orders;"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}

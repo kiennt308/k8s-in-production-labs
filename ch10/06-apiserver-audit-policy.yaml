@@ -1,0 +1,43 @@
+# Kubernetes kube-apiserver Audit Policy (audit.k8s.io/v1)
+# Pass via --audit-policy-file=/etc/kubernetes/audit-policy.yaml
+apiVersion: audit.k8s.io/v1
+kind: Policy
+omitStages:
+  - RequestReceived
+rules:
+  # Drop high-volume read-only health and metrics probes
+  - level: None
+    nonResourceURLs:
+      - /healthz*
+      - /livez*
+      - /readyz*
+      - /metrics
+      - /version
+  # Never log Secret bodies (RequestResponse leaks plaintext credentials)
+  - level: Metadata
+    resources:
+      - group: ""
+        resources: ["secrets", "configmaps", "tokenreviews"]
+  # Capture full payloads for mutations inside OrderFlow namespaces
+  - level: RequestResponse
+    verbs: ["create", "update", "patch", "delete", "deletecollection"]
+    namespaces:
+      - orderflow-prod
+      - platform-gateway
+      - platform-security
+  # Audit RBAC privilege changes across the cluster
+  - level: RequestResponse
+    resources:
+      - group: "rbac.authorization.k8s.io"
+        resources:
+          - clusterroles
+          - clusterrolebindings
+          - roles
+          - rolebindings
+  # Capture pod exec, attach, and port-forward sessions
+  - level: Metadata
+    resources:
+      - group: ""
+        resources: ["pods/exec", "pods/attach", "pods/portforward"]
+  # Baseline metadata logging for remaining API calls
+  - level: Metadata
